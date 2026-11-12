@@ -1,0 +1,44 @@
+{
+  "run_id": "B1",
+  "repo": "authz-runs-B1-target",
+  "target": "/tmp/authz-runs/B1/target",
+  "source_ref": {
+    "commit": null,
+    "dirty": null,
+    "note": "The supplied target tree has no git metadata. The review used the files present under the target root."
+  },
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "relationships_md_in_scope": true,
+  "scope_paths": [
+    "relationships.md",
+    "app/main.py",
+    "app/routes.py",
+    "app/access.py",
+    "app/db.py",
+    "app/passwords.py",
+    "app/__init__.py"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "execution_note": "No OS sandbox was available. The service was not started and no network requests were sent. Each confirmed result is the cross-account read or write implied by a control flow that is entirely in the supplied source.",
+  "selected_companion_files": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md",
+    "HUNTING.md"
+  ],
+  "prior_run_paths": [],
+  "prior_runs": "No prior coverage ledger or findings file was read. This run did not search for other audit outputs.",
+  "shared_file_owners": {
+    "findings.json": "single-agent",
+    "REPORT.md": "single-agent",
+    "run-metadata.json": "single-agent"
+  },
+  "run_status": "complete",
+  "coverage_claim": "partial",
+  "hunter_wave_count": 1,
+  "verifier": "same-agent second pass",
+  "relationships_md": "in scope as the intended trust model, not as a finding list"
+}

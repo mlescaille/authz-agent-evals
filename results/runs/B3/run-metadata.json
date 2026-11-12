@@ -1,0 +1,34 @@
+{
+  "run_id": "B3",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "relationships_md_in_scope": true,
+  "relationships_md": "in scope as the specification of intended account, device, link, and merge behavior",
+  "repo": "B3-target",
+  "target": "/tmp/authz-runs/B3/target",
+  "source_ref": "target directory is not a git repository; reviewed the files present under /tmp/authz-runs/B3/target",
+  "scope_paths": ["app/", "relationships.md"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "execution_note": "No OS sandbox was available. The service was not started and no network requests were sent. Confirmed authorization results are source-trace conclusions whose control flow is entirely in the supplied source.",
+  "selected_companion_files": [
+    "SKILL.md",
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md",
+    "HUNTING.md",
+    "report-schema.json"
+  ],
+  "prior_run_paths": [],
+  "prior_runs_consulted": false,
+  "prior_run_note": "No prior ledger was used. This run did not search for other audit runs, manifests, ground truth, or scoring rules.",
+  "shared_file_owners": {
+    "findings.json": "b3-single-agent",
+    "REPORT.md": "b3-single-agent",
+    "run-metadata.json": "b3-single-agent"
+  },
+  "run_status": "complete",
+  "agents_spent": 1,
+  "coverage_note": "Quick profile performed by one agent. The agent mapped every route and authorization helper, hunted cross-account reads and writes, then re-read every cited line and tried to disprove each candidate before keeping it. A separate coverage-critic agent was not launched because the task required a single agent. relationships.md was in scope."
+}

@@ -1,0 +1,46 @@
+{
+  "run_id": "B5",
+  "repo": "authz-runs-B5-target",
+  "target": "/tmp/authz-runs/B5/target",
+  "source_ref": {
+    "commit": null,
+    "dirty": null,
+    "note": "The target directory has no git metadata. The reviewed tree is the files present under app/ and relationships.md."
+  },
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "relationships_md": "in scope",
+  "relationships_md_in_scope": true,
+  "scope_paths": [
+    "app/__init__.py",
+    "app/access.py",
+    "app/db.py",
+    "app/main.py",
+    "app/passwords.py",
+    "app/routes.py",
+    "relationships.md"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "execution_note": "No OS sandbox was available and the service was not started. No network requests were sent. Confirmed authorization results were derived from source traces.",
+  "selected_companion_files": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md"
+  ],
+  "prior_run_paths": [],
+  "prior_run_note": "No prior coverage ledger or findings file was read. Other audit runs were not searched.",
+  "shared_file_owners": {
+    "findings.json": "parent",
+    "REPORT.md": "parent",
+    "run-metadata.json": "parent"
+  },
+  "agents": {
+    "hunter": "same-agent",
+    "verifier": "same-agent second pass"
+  },
+  "coverage_claim": "partial",
+  "coverage_critic": "not run; single-agent quick profile replaced the critic and the fresh verifier with a same-agent second pass",
+  "run_status": "complete"
+}

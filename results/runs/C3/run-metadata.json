@@ -1,0 +1,31 @@
+{
+  "run_id": "C3",
+  "repo": "authz-C3",
+  "target": "/tmp/authz-runs/C3/target",
+  "source_ref": "unversioned working tree; reviewed app/main.py, app/routes.py, app/access.py, app/db.py, app/passwords.py, and app/__init__.py",
+  "profile": "quick",
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "verification": "same-agent second pass",
+  "scoped_loopback_token_available": true,
+  "loopback_base_url": "http://127.0.0.1:57241",
+  "loopback_token_scope": "read-only session presented for account 1, device id 1, and note id 1; direct reads of other object ids returned an out-of-source scope refusal",
+  "prior_run_paths": [],
+  "selected_companions": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md"
+  ],
+  "shared_file_owners": {
+    "findings.json": "single-agent",
+    "REPORT.md": "single-agent",
+    "run-metadata.json": "single-agent"
+  },
+  "agents": {
+    "hunter": "same agent",
+    "verifier": "same-agent second pass"
+  },
+  "run_status": "complete",
+  "findings_validator": "PASS: 6 findings valid"
+}

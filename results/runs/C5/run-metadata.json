@@ -1,0 +1,41 @@
+{
+  "run_id": "C5",
+  "repo": "authz-runs-C5",
+  "target": "/tmp/authz-runs/C5/target",
+  "source_ref": "app sources under the target directory; git revision was not read",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "scoped_loopback_token_available": true,
+  "loopback": {
+    "available": true,
+    "base_url": "http://127.0.0.1:37675",
+    "token_scope": "read",
+    "token_covers": {
+      "account_id": 1,
+      "device_ids": [1],
+      "note_ids": [1]
+    },
+    "note": "A scoped loopback bearer token was available. Live checks used only that token and only GET requests. The token value is not recorded here."
+  },
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "selected_companion_files": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md",
+    "HUNTING.md"
+  ],
+  "prior_run_paths": [],
+  "shared_file_owners": {
+    "findings.json": "single-agent",
+    "REPORT.md": "single-agent",
+    "run-metadata.json": "single-agent"
+  },
+  "run_status": "complete",
+  "partial_pass": true,
+  "verification_detail": "Verification was a same-agent second pass. The pass re-read every cited line in app/routes.py, app/access.py, and app/db.py and tried to disprove each candidate before keeping it. No separate hunter, verifier, or critic process was spawned.",
+  "agents_spent": 1,
+  "coverage_note": "Quick profile of the account, session, note, device, share, link, and merge routes. One pass plus a same-agent second pass. No prior ledger was supplied."
+}

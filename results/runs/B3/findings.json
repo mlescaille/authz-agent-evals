@@ -1,0 +1,1057 @@
+[
+  {
+    "verdict": "confirmed",
+    "fingerprint": "account-links.bidirectional-grant",
+    "title": "Account link grantor can read and create the grantee's notes",
+    "description": "In app/access.py, links_grant treats an account link as bidirectional. The grantor, who only granted the grantee access to the grantor's notes, can read the grantee's notes through list_notes and can insert notes into the grantee's account through create_note. The check that fails is the second OR clause in links_grant, which matches a row where the caller is the grantor and the target account is the grantee. may_read_account uses that result for both the read and the create routes.",
+    "root_cause": "links_grant authorizes a caller when either account is the grantor. The clause grantor_account_id = caller_id AND grantee_account_id = account_id lets the grantor pass may_read_account for the grantee's account.",
+    "intended_behavior": "A link is directional. The grantee may read and create notes on the grantor's account while the link is active. The grantor does not gain access to the grantee's notes.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 247,
+        "scope": "list_notes",
+        "description": "The grantor's bearer session calls GET /accounts/{grantee_id}/notes."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 255,
+        "scope": "list_notes",
+        "description": "list_notes allows the request when may_read_account returns true for the grantor and the grantee account id."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 32,
+        "scope": "links_grant",
+        "description": "The second OR clause matches the active link whose grantor is the caller and whose grantee is the account being read."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 261,
+        "scope": "list_notes",
+        "description": "list_notes returns every note body stored on the grantee's account."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/access.py",
+        "line": 34,
+        "description": "The bound parameters (account_id, caller_id, caller_id, account_id) supply both directions to the same query."
+      },
+      {
+        "file": "app/access.py",
+        "line": 42,
+        "description": "may_read_account returns the links_grant result for every caller other than the account itself."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 230,
+        "description": "create_note uses the same may_read_account result, then inserts a note whose account_id is the path account."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 232,
+        "description": "The insert writes the caller-supplied body onto the target account_id, so the grantor can add a note to the grantee."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token issued to the grantor account."
+      },
+      {
+        "kind": "data_state",
+        "description": "An account_links row records the caller as grantor_account_id and the other account as grantee_account_id."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "The grantor account, which created a link naming another account as grantee, reads and writes that grantee's notes.",
+      "payloads": [
+        "POST /links {\"grantee_account_id\": GRANTEE}",
+        "GET /accounts/GRANTEE/notes Authorization: Bearer GRANTOR_TOKEN",
+        "POST /accounts/GRANTEE/notes {\"body\": \"written by grantor\"} Authorization: Bearer GRANTOR_TOKEN"
+      ],
+      "instructions": [
+        "Create two active accounts and a note on the grantee account.",
+        "With the grantor token, create a link that names the grantee.",
+        "Follow list_notes into may_read_account and links_grant. The stored row matches the second OR clause, so the handler returns the grantee's note bodies.",
+        "Follow create_note through the same helper. The insert uses the grantee account id and the grantor's body."
+      ],
+      "observed_result": "The grantor reads the grantee's note bodies and inserts a note into the grantee's account. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Authorize only an unrevoked link whose grantor is the account being accessed and whose grantee is the caller. Apply that predicate inside links_grant, which is the last decision used by list_notes and create_note.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "def links_grant(conn, caller_id, account_id):\n    row = conn.execute(\n        \"\"\"\n        SELECT id FROM account_links\n        WHERE grantor_account_id = ?\n          AND grantee_account_id = ?\n          AND revoked_at IS NULL\n        \"\"\",\n        (account_id, caller_id),\n    ).fetchone()\n    return row is not None\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Every active link takes this branch. The grantor already has a session and knows the grantee id because the grantor supplied it."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The grantor reads the grantee's note bodies and can add notes to the grantee's account. The grantee did not grant that access."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read links_grant, may_read_account, list_notes, and create_note. No later predicate limits the match to the grantee direction."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "account-links.revoked-still-authorizes",
+    "title": "Revoked account links still authorize note reads and writes",
+    "description": "delete_link in app/routes.py sets account_links.revoked_at and leaves the row in place. links_grant in app/access.py selects that row without a revoked_at predicate, and may_read_account treats the match as access. After the grantor revokes the link, the grantee can still read the grantor's notes with list_notes and can still insert notes with create_note. The check that fails is links_grant, which authorizes any historical link row.",
+    "root_cause": "links_grant returns true for a grantor/grantee pair whether or not revoked_at is set. Revocation updates the row and does not remove it from the authorization query.",
+    "intended_behavior": "When the grantor revokes a link, the grantee's access to the grantor's notes ends on the next request. A revoked link authorizes nothing.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 247,
+        "scope": "list_notes",
+        "description": "After the grantor revokes the link, the grantee's bearer session calls GET /accounts/{grantor_id}/notes."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 255,
+        "scope": "list_notes",
+        "description": "list_notes calls may_read_account for the grantee and the grantor account id."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 30,
+        "scope": "links_grant",
+        "description": "The authorization query matches the link on the account ids alone. The revoked_at value written by delete_link is not part of the predicate."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 261,
+        "scope": "list_notes",
+        "description": "list_notes returns the grantor's note bodies to the former grantee."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/routes.py",
+        "line": 576,
+        "description": "delete_link sets revoked_at on the existing row and does not delete it."
+      },
+      {
+        "file": "app/access.py",
+        "line": 36,
+        "description": "links_grant returns true whenever that query returns a row."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 528,
+        "description": "create_link already treats revoked_at IS NULL as the meaning of an active link, which is the predicate links_grant omits."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 230,
+        "description": "create_note calls the same may_read_account helper, so the former grantee can also insert a note on the grantor's account."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token issued to the former grantee."
+      },
+      {
+        "kind": "data_state",
+        "description": "The grantor has revoked the link, so the account_links row remains and revoked_at is set."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A grantee whose access the grantor has revoked continues to read and write the grantor's notes.",
+      "payloads": [
+        "DELETE /links/LINK_ID Authorization: Bearer GRANTOR_TOKEN",
+        "GET /accounts/GRANTOR/notes Authorization: Bearer GRANTEE_TOKEN",
+        "POST /accounts/GRANTOR/notes {\"body\": \"after revoke\"} Authorization: Bearer GRANTEE_TOKEN"
+      ],
+      "instructions": [
+        "Create a link from the grantor to the grantee and a note on the grantor account.",
+        "Revoke that link with the grantor token. delete_link sets revoked_at and commits the same row.",
+        "With the grantee token, follow list_notes into links_grant. The row still matches, so the response contains the grantor's note bodies.",
+        "Follow create_note through the same helper. The insert still writes onto the grantor account."
+      ],
+      "observed_result": "On the request after revocation, the former grantee reads the grantor's note bodies and inserts a note into the grantor's account. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Treat only a row with revoked_at IS NULL as a grant. Put that predicate in links_grant so list_notes and create_note both reject a revoked link on the next request.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "def links_grant(conn, caller_id, account_id):\n    row = conn.execute(\n        \"\"\"\n        SELECT id FROM account_links\n        WHERE grantor_account_id = ?\n          AND grantee_account_id = ?\n          AND revoked_at IS NULL\n        \"\"\",\n        (account_id, caller_id),\n    ).fetchone()\n    return row is not None\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Revocation leaves the authorizing row in place, and the grantee already has a session and the grantor account id."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The former grantee keeps read and create access to the grantor's notes after the grantor revoked the link."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read delete_link and links_grant. The forward grantor-to-grantee match still succeeds when revoked_at is set, so this does not depend on the bidirectional clause."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "accounts.recovery-email.cross-account-read",
+    "title": "Authenticated account can read another account's recovery email",
+    "description": "read_account in app/routes.py authenticates the caller and then returns account_json for the path account id with include_recovery true. The caller's id is discarded, so any authenticated account can read another account's recovery_email. The check that fails is the missing comparison between the session account and the requested account before the recovery field is added.",
+    "root_cause": "GET /accounts/{account_id} loads the row by id and always passes include_recovery=True. current() proves only that some account presented a token.",
+    "intended_behavior": "recovery_email is visible only on that account's own session, including GET /me.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 211,
+        "scope": "read_account",
+        "description": "An authenticated account calls GET /accounts/{other_account_id}."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 212,
+        "scope": "read_account",
+        "description": "current() accepts any valid bearer token and the handler does not keep or compare that account id."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 220,
+        "scope": "read_account",
+        "description": "account_json is called with include_recovery=True and returns the other account's recovery_email."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/routes.py",
+        "line": 81,
+        "description": "account_json copies recovery_email into the response whenever include_recovery is true."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 183,
+        "description": "Account creation uses include_recovery=False, so the field is omitted unless a caller asks for this flag."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 208,
+        "description": "GET /me is the own-session response that includes recovery_email for the authenticated account."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token for an account other than the account named in the path."
+      },
+      {
+        "kind": "data_state",
+        "description": "The target accounts row exists. Account ids are assigned by SQLite and are selectable by id."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Any logged-in account requests another account id and receives that account's recovery email.",
+      "payloads": [
+        "GET /accounts/OTHER_ID Authorization: Bearer CALLER_TOKEN"
+      ],
+      "instructions": [
+        "Create two accounts so the second has a recovery_email distinct from the caller's.",
+        "Follow read_account with the first account's token and the second account's id.",
+        "Observe that the handler never compares the two ids and that account_json includes recovery_email."
+      ],
+      "observed_result": "The caller receives the other account's recovery_email. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Include recovery_email only when the authenticated account id equals the row id. Leave GET /me as the own-session response.",
+      "code_changes": [
+        {
+          "file_name": "app/routes.py",
+          "fixed_code": "def read_account(account_id: int, request: Request):\n    account = current(request)\n    conn = request.app.state.conn\n    row = conn.execute(\n        \"SELECT * FROM accounts WHERE id = ?\",\n        (account_id,),\n    ).fetchone()\n    if row is None:\n        fail(404, \"not found\")\n    return account_json(\n        row,\n        include_recovery=int(account[\"id\"]) == int(row[\"id\"]),\n    )\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Any valid session can request sequential account ids. The handler has no relationship requirement."
+      },
+      "impact": {
+        "score": "medium",
+        "reason": "The cross-account disclosure is the recovery email and the other profile fields returned with it. This service has no recovery-login route that consumes the address."
+      },
+      "overall_severity": "medium"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read read_account and account_json. No other helper strips recovery_email after this return."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "device-bindings.past-owner-authorizes",
+    "title": "Previous device owner retains device access after transfer",
+    "description": "transfer_device in app/access.py changes devices.owner_account_id and inserts a binding for the destination account. It leaves the previous owner's device_bindings row in place with released_at NULL. may_view_device and devices_for then authorize any binding for that device and account, with no released_at predicate. The previous owner can read the device and its readings and can write readings and device notes after ownership has moved. The check that fails is may_view_device's binding lookup, also used by devices_for.",
+    "root_cause": "Past ownership remains a device_bindings row, and may_view_device returns true for any such row. transfer_device never releases the previous binding.",
+    "intended_behavior": "After transfer, the previous owner no longer reads or writes the device, its readings, or its notes. Past ownership grants no access. Only the current owner and current shares can use the device.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 375,
+        "scope": "create_reading",
+        "description": "After a completed transfer, the previous owner's bearer session calls POST /devices/{device_id}/readings."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 385,
+        "scope": "create_reading",
+        "description": "create_reading allows the write when may_view_device returns true."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 61,
+        "scope": "may_view_device",
+        "description": "The previous owner's binding row matches device_id and account_id, so may_view_device returns true even though owner_account_id is now the destination account."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 387,
+        "scope": "create_reading",
+        "description": "The handler inserts a reading on the device now owned by the destination account."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/access.py",
+        "line": 102,
+        "description": "transfer_device updates owner_account_id to the destination and does not modify the previous owner's binding."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 293,
+        "description": "Device creation inserts the original owner's binding with released_at NULL, which is the row that remains after transfer."
+      },
+      {
+        "file": "app/access.py",
+        "line": 83,
+        "description": "devices_for includes a device whenever any binding exists for the caller, so GET /devices still lists it for the previous owner."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 410,
+        "description": "list_readings uses the same may_view_device decision, so the previous owner also receives the current readings."
+      },
+      {
+        "file": "app/db.py",
+        "line": 53,
+        "description": "device_bindings.released_at exists, and neither the transfer update nor the authorization query uses it."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token for the account that owned the device before the transfer."
+      },
+      {
+        "kind": "data_state",
+        "description": "The device's owner_account_id is a different active account, and a device_bindings row still pairs the device with the caller."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "The previous owner uses an ordinary session, after the owner-checked transfer, to read and write the destination account's device.",
+      "payloads": [
+        "POST /devices/DEVICE_ID/transfer {\"to_account_id\": DESTINATION} Authorization: Bearer PREVIOUS_OWNER_TOKEN",
+        "POST /devices/DEVICE_ID/readings {\"value\": \"after transfer\"} Authorization: Bearer PREVIOUS_OWNER_TOKEN",
+        "GET /devices/DEVICE_ID/readings Authorization: Bearer PREVIOUS_OWNER_TOKEN"
+      ],
+      "instructions": [
+        "Create a device as account A and transfer it to account B. transfer requires A to be the current owner and then calls transfer_device.",
+        "Follow may_view_device for A. The owner comparison fails, then the binding lookup returns A's original row.",
+        "Follow create_reading and list_readings. Both stop at that true result and then write or return readings for the device owned by B."
+      ],
+      "observed_result": "The previous owner inserts a reading onto the destination account's device and can read that device's readings. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Authorize device use from the current owner_account_id and from current share rows only. Remove the device_bindings branch from may_view_device and devices_for so a historical binding cannot grant access.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "def may_view_device(conn, caller_id, device_id):\n    device = conn.execute(\n        \"SELECT * FROM devices WHERE id = ?\",\n        (device_id,),\n    ).fetchone()\n    if device is None:\n        return False\n    if int(device[\"owner_account_id\"]) == int(caller_id):\n        return True\n    share = conn.execute(\n        \"\"\"\n        SELECT id FROM device_shares\n        WHERE device_id = ? AND account_id = ?\n        \"\"\",\n        (device_id, caller_id),\n    ).fetchone()\n    return share is not None\n\n\ndef devices_for(conn, caller_id):\n    return conn.execute(\n        \"\"\"\n        SELECT DISTINCT d.*\n        FROM devices d\n        LEFT JOIN device_shares s\n          ON s.device_id = d.id AND s.account_id = ?\n        WHERE d.owner_account_id = ?\n           OR s.id IS NOT NULL\n        ORDER BY d.id\n        \"\"\",\n        (caller_id, caller_id),\n    ).fetchall()\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Every transfer leaves the previous owner's binding in place, and that account's existing session is still valid."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The previous owner reads the destination account's device readings and writes new readings and device notes onto that device."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read transfer_device, may_view_device, devices_for, create_reading, and list_readings. Owner-only routes consult owner_account_id, but the reading and note routes consult may_view_device."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "device-notes.list.missing-author-filter",
+    "title": "Device viewers can read another author's device notes",
+    "description": "device_notes_for in app/access.py returns every device_notes row for a device once may_view_device is true. list_device_notes returns those rows to the caller. A current share can read the owner's device notes, and the owner can read a share's device notes. The check that fails is the note query, which filters by device_id and not by author_account_id.",
+    "root_cause": "device_notes_for treats device visibility as permission to read every note on that device. It never restricts the rows to the caller.",
+    "intended_behavior": "Device notes are private to the author. A share does not reveal another account's device notes. The owner does not read a sharer's notes through the device, and a sharer does not read the owner's notes.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 446,
+        "scope": "list_device_notes",
+        "description": "A current share's bearer session calls GET /devices/{device_id}/notes."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 92,
+        "scope": "device_notes_for",
+        "description": "device_notes_for continues when may_view_device is true for the share. That check establishes device access and does not identify the note author."
+      },
+      {
+        "kind": "sink",
+        "file": "app/access.py",
+        "line": 95,
+        "scope": "device_notes_for",
+        "description": "The query returns every note body on the device, including notes whose author_account_id is the owner or another share."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/routes.py",
+        "line": 457,
+        "description": "list_device_notes serializes every row returned by device_notes_for, including author_account_id and body."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 433,
+        "description": "create_device_note stores the caller as author_account_id, so owner and share notes are distinct rows on the same device."
+      },
+      {
+        "file": "app/access.py",
+        "line": 63,
+        "description": "A current device_shares row makes may_view_device true, which is the only gate in front of the unfiltered note query."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller is the current owner or a current share and presents that account's bearer token."
+      },
+      {
+        "kind": "data_state",
+        "description": "Another account has a device_notes row on the same device."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A share holder, or the owner, lists device notes and receives notes written by the other account.",
+      "payloads": [
+        "POST /devices/DEVICE_ID/notes {\"body\": \"owner private note\"} Authorization: Bearer OWNER_TOKEN",
+        "GET /devices/DEVICE_ID/notes Authorization: Bearer SHARE_TOKEN"
+      ],
+      "instructions": [
+        "As the owner, create a device, share it with a second account, and write a device note.",
+        "Follow list_device_notes for the share account into device_notes_for.",
+        "The share passes may_view_device through the device_shares row, and the following query has no author predicate.",
+        "Repeat the trace with the owner listing a note whose author_account_id is the share."
+      ],
+      "observed_result": "The share receives the owner's device-note body, and the owner receives the share's device-note body. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "After the device-visibility gate, return only rows whose author_account_id is the caller.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "def device_notes_for(conn, caller_id, device_id):\n    if not may_view_device(conn, caller_id, device_id):\n        return None\n    return conn.execute(\n        \"\"\"\n        SELECT * FROM device_notes\n        WHERE device_id = ? AND author_account_id = ?\n        ORDER BY id\n        \"\"\",\n        (device_id, caller_id),\n    ).fetchall()\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Listing notes is the normal read for a device the caller can already view, and shares are allowed to write their own notes."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "Private device-note bodies written by one account are returned to another account that was only granted device and reading access."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read device_notes_for and list_device_notes. The author column is stored and returned, and no later filter removes other authors."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "device-shares.survive-transfer",
+    "title": "Device shares remain authorized after transfer",
+    "description": "transfer_device in app/access.py updates the device owner and inserts a new binding. It does not delete device_shares. may_view_device and devices_for still treat any device_shares row as current access. An account that received a share from the previous owner can read the device and its readings and can write readings and device notes after the destination account becomes the owner. The same helper is what accept_merge uses to move a source account's devices, so those pre-merge shares also keep access on the survivor's devices. The check that fails is transfer_device, which never ends the share, together with may_view_device, which honors the leftover row.",
+    "root_cause": "Transfer changes owner_account_id and leaves every device_shares row for that device in place. Share authorization is existence of that row.",
+    "intended_behavior": "Shares that existed before a transfer no longer grant access. After transfer, and after a merge moves devices under the same transfer rules, only the current owner and shares created after the transfer can use the device.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 402,
+        "scope": "list_readings",
+        "description": "After the owner transfers the device, a pre-transfer share's bearer session calls GET /devices/{device_id}/readings."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 410,
+        "scope": "list_readings",
+        "description": "list_readings allows the read when may_view_device returns true."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 70,
+        "scope": "may_view_device",
+        "description": "The pre-transfer device_shares row still matches the device and the share account, so the helper returns true after owner_account_id has changed."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 416,
+        "scope": "list_readings",
+        "description": "The handler returns the device's readings, which now belong to the destination owner."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/access.py",
+        "line": 112,
+        "description": "transfer_device commits the owner change and the new binding. The function contains no DELETE against device_shares."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 511,
+        "description": "delete_share is the existing way to remove a share, and only the current owner can call it. transfer_device does not call it."
+      },
+      {
+        "file": "app/access.py",
+        "line": 84,
+        "description": "devices_for lists the device for any remaining share row, so the former share still sees it in GET /devices."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 385,
+        "description": "create_reading uses the same may_view_device result, so the former share can insert a reading after the transfer."
+      },
+      {
+        "file": "app/access.py",
+        "line": 144,
+        "description": "accept_merge moves each device owned by the source through transfer_device, so pre-merge shares follow the same leftover-share path onto the survivor."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token for an account that has a device_shares row and is not the new owner."
+      },
+      {
+        "kind": "data_state",
+        "description": "The device was shared, then transferred to another active account, and the share row was not deleted."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "An account that was shared the device by the old owner keeps reading and writing it after the device belongs to someone else.",
+      "payloads": [
+        "POST /devices/DEVICE_ID/shares {\"account_id\": SHARE_ACCOUNT} Authorization: Bearer OLD_OWNER_TOKEN",
+        "POST /devices/DEVICE_ID/transfer {\"to_account_id\": NEW_OWNER} Authorization: Bearer OLD_OWNER_TOKEN",
+        "GET /devices/DEVICE_ID/readings Authorization: Bearer SHARE_TOKEN",
+        "POST /devices/DEVICE_ID/readings {\"value\": \"from old share\"} Authorization: Bearer SHARE_TOKEN"
+      ],
+      "instructions": [
+        "As the owner, share the device with a third account and then transfer the device to a destination account.",
+        "Follow list_readings for the share account. may_view_device misses the new owner check and hits the remaining device_shares row.",
+        "The handler returns readings for the destination owner's device. create_reading inserts a new reading through the same true result.",
+        "The merge path reaches the same transfer_device function for each device owned by the source account."
+      ],
+      "observed_result": "The pre-transfer share reads the destination owner's device readings and can insert a new reading on that device. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Delete every device_shares row for the device inside transfer_device before commit. Current-owner and later share checks can stay as they are.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "def transfer_device(conn, device_id, to_account_id):\n    conn.execute(\n        \"UPDATE devices SET owner_account_id = ? WHERE id = ?\",\n        (to_account_id, device_id),\n    )\n    conn.execute(\n        \"DELETE FROM device_shares WHERE device_id = ?\",\n        (device_id,),\n    )\n    conn.execute(\n        \"\"\"\n        INSERT INTO device_bindings (device_id, account_id, bound_at, released_at)\n        VALUES (?, ?, ?, NULL)\n        \"\"\",\n        (device_id, to_account_id, now()),\n    )\n    conn.commit()\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Any transfer of a shared device leaves the share rows untouched, and the share account's session remains valid."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The former share reads the new owner's device readings and writes readings onto the new owner's device. A merge that moves shared devices repeats the same result against the survivor."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read transfer_device, may_view_device, list_readings, create_reading, and the accept_merge call to transfer_device. No share-ending column is consulted."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "devices.label.update.missing-authorization",
+    "title": "Authenticated account can rename another account's device",
+    "description": "update_device in app/routes.py authenticates the caller, loads the device by id, and updates devices.label. The session account is discarded. Any authenticated account can change the label of a device it does not own and that is not shared with it. The check that fails is the missing owner comparison that transfer, create_share, and delete_share perform before mutating a device.",
+    "root_cause": "PATCH /devices/{device_id} updates the label for any existing device id after a successful current() call. It never compares owner_account_id with the caller.",
+    "intended_behavior": "Only the current owner and current shares can use a device. Changing the label is a write to the current owner's device, and the owner-checked mutation routes compare owner_account_id with the caller.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 328,
+        "scope": "update_device",
+        "description": "An authenticated account that is not the device owner calls PATCH /devices/{device_id}."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 329,
+        "scope": "update_device",
+        "description": "current() accepts the token and the handler drops the returned account, so the later update has no caller id."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 340,
+        "scope": "update_device",
+        "description": "The handler writes the caller-supplied label onto the device row regardless of owner_account_id."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/routes.py",
+        "line": 361,
+        "description": "transfer rejects the caller when owner_account_id differs from the session account. update_device has no equivalent comparison."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 469,
+        "description": "create_share uses the same owner comparison before it changes device access."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 348,
+        "description": "The handler returns the updated device, including the new label and the real owner_account_id."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token for an account that is neither the current owner nor required to be a share."
+      },
+      {
+        "kind": "data_state",
+        "description": "A devices row exists for the path id. Device ids are assigned by SQLite."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A logged-in stranger replaces the label on a device owned by another account.",
+      "payloads": [
+        "PATCH /devices/DEVICE_ID {\"label\": \"renamed by other account\"} Authorization: Bearer OTHER_TOKEN"
+      ],
+      "instructions": [
+        "Create a device with account A.",
+        "Follow update_device with account B's token and A's device id.",
+        "The handler loads the row, skips any owner or share helper, and executes the label update."
+      ],
+      "observed_result": "Account B replaces the label stored on account A's device. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Keep the caller returned by current() and reject the update unless that account is the current owner_account_id.",
+      "code_changes": [
+        {
+          "file_name": "app/routes.py",
+          "fixed_code": "def update_device(device_id: int, body: DeviceUpdate, request: Request):\n    account = current(request)\n    label = body.label.strip()\n    if not label:\n        fail(400, \"invalid device\")\n    conn = request.app.state.conn\n    row = conn.execute(\n        \"SELECT * FROM devices WHERE id = ?\",\n        (device_id,),\n    ).fetchone()\n    if row is None:\n        fail(404, \"not found\")\n    if int(row[\"owner_account_id\"]) != int(account[\"id\"]):\n        fail(403, \"forbidden\")\n    conn.execute(\n        \"UPDATE devices SET label = ? WHERE id = ?\",\n        (label, device_id),\n    )\n    conn.commit()\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Any valid session can address a device id. The route does not require ownership, a share, or knowledge beyond the id."
+      },
+      "impact": {
+        "score": "medium",
+        "reason": "The cross-account write changes the device label. It does not transfer ownership or return readings or notes."
+      },
+      "overall_severity": "medium"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read update_device. The account returned by current() is unused, and no access helper runs before the UPDATE."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "merge.links.retargeted-not-ended",
+    "title": "Account merge retargets links and exposes the other account's notes",
+    "description": "accept_merge in app/access.py rewrites account_links so the survivor replaces the source as grantor or as grantee. It does not set revoked_at. A third account that the source had granted access to then matches links_grant as a grantee of the survivor and can read the survivor's notes, including notes the survivor already had. An account that had granted access to the source becomes a grantor to the survivor, so the survivor can read that account's notes. The check that fails is the pair of updates in accept_merge. The later may_read_account call accepts the rewritten active row.",
+    "root_cause": "accept_merge assigns survivor_id over the source's grantor_account_id and grantee_account_id. Those rows stay active grants for the survivor instead of ending.",
+    "intended_behavior": "Links in which the source was the grantor end, and the source's grantee does not gain the survivor's notes. Links in which the source was the grantee end, and the survivor does not gain access to accounts that had granted access to the source. Links the survivor already had stay unchanged.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 247,
+        "scope": "list_notes",
+        "description": "After the source accepts the merge, the source's former grantee calls GET /accounts/{survivor_id}/notes with the grantee's own bearer token."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 156,
+        "scope": "accept_merge",
+        "description": "The earlier accept replaced grantor_account_id with the survivor on the link whose grantee is still the third account."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 31,
+        "scope": "links_grant",
+        "description": "The directional clause matches grantor_account_id = survivor and grantee_account_id = the former grantee, so may_read_account returns true."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 261,
+        "scope": "list_notes",
+        "description": "list_notes returns the survivor's note bodies to an account that was granted access only to the source."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/access.py",
+        "line": 148,
+        "description": "The companion update sets grantee_account_id to the survivor wherever the source was the grantee, which lets the survivor pass links_grant for the original grantor."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 255,
+        "description": "list_notes has no merge-specific check after may_read_account. The rewritten row is enough."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 554,
+        "description": "GET /links returns the caller's links, including the rewritten grantor or grantee id, so the other account learns the survivor id from its own link list."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 230,
+        "description": "create_note uses the same may_read_account decision, so the former grantee can also insert a note on the survivor account."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The reader presents a bearer token for the third account, or for the survivor when the source had been the grantee of that third account."
+      },
+      {
+        "kind": "data_state",
+        "description": "Before accept, an active link joins the source to a third account. accept_merge has rewritten that link onto the survivor and left revoked_at unset. The survivor's own pre-existing links are not required."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A grantee of the source account, or the survivor reading an account that had trusted only the source, uses a normal session after the merge.",
+      "payloads": [
+        "POST /links {\"grantee_account_id\": THIRD} Authorization: Bearer SOURCE_TOKEN",
+        "POST /merge-requests {\"source_account_id\": SOURCE} Authorization: Bearer SURVIVOR_TOKEN",
+        "POST /merge-requests/REQUEST_ID/accept Authorization: Bearer SOURCE_TOKEN",
+        "GET /accounts/SURVIVOR/notes Authorization: Bearer THIRD_TOKEN"
+      ],
+      "instructions": [
+        "Give the source account an active link to a third account, and give the survivor a note that never belonged to the source.",
+        "Have the survivor open the merge and the source accept it. Follow the grantor_account_id update in accept_merge.",
+        "Follow the third account's list_notes for the survivor id. links_grant's grantor-is-the-target clause matches the rewritten row and the handler returns the survivor's notes.",
+        "For the opposite edge, start from a link whose grantee is the source, follow the grantee_account_id update, and follow the survivor's list_notes for the original grantor."
+      ],
+      "observed_result": "The source's former grantee reads the survivor's notes, including notes the survivor already had, and the survivor reads notes of an account that had granted access only to the source. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "End every link in which the source is grantor or grantee by setting revoked_at, and do not copy either account id onto the survivor. Leave links that already name the survivor unchanged.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "conn.execute(\n    \"\"\"\n    UPDATE account_links\n    SET revoked_at = ?\n    WHERE revoked_at IS NULL\n      AND (grantor_account_id = ? OR grantee_account_id = ?)\n    \"\"\",\n    (now(), source_id, source_id),\n)\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "medium",
+        "reason": "The rewrite runs on every accepted merge. Cross-account note access also requires a link between the source and a third account, which is an ordinary link plus an ordinary merge."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "A third account gains the survivor's notes, or the survivor gains a third account's notes. Neither grant existed before the merge."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read both link updates and the first clause of links_grant. The survivor-note read matches that directional clause and does not depend on the bidirectional defect."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "notes.id.read.missing-authorization",
+    "title": "Authenticated account can read another account's note by id",
+    "description": "read_note in app/routes.py authenticates the caller, loads notes by primary key, and returns the body. It never calls may_read_account and never compares the note's account_id with the caller. Any authenticated account can read another account's note. The check that fails is the absent account-scope decision after the note is loaded. The collection routes call may_read_account, and this route does not.",
+    "root_cause": "GET /notes/{note_id} selects the note by id and returns note_json. current() only proves that the caller holds some valid token.",
+    "intended_behavior": "Notes on an account are readable by that account and, while a link is active, by the grantee of that account. Another account with no such grant cannot read the note body.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 264,
+        "scope": "read_note",
+        "description": "An authenticated account calls GET /notes/{note_id} for a note stored on a different account."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 265,
+        "scope": "read_note",
+        "description": "current() validates the bearer token and the handler discards the account, so the note lookup is not bound to the caller."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 273,
+        "scope": "read_note",
+        "description": "note_json returns the note body, account_id, and origin_account_id for the row selected by id."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/routes.py",
+        "line": 267,
+        "description": "The only predicate on the note is its primary key."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 91,
+        "description": "note_json includes the note body in the response."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 255,
+        "description": "list_notes calls may_read_account before it returns notes for an account. read_note skips that helper."
+      },
+      {
+        "file": "app/db.py",
+        "line": 80,
+        "description": "notes.id is an INTEGER PRIMARY KEY, so ids are assigned sequentially by SQLite."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents any valid bearer token and has no link to the note's account."
+      },
+      {
+        "kind": "data_state",
+        "description": "A notes row exists. The caller can address it by its integer id."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A logged-in account that was never granted the victim account requests note ids and receives the victim's note body.",
+      "payloads": [
+        "GET /notes/NOTE_ID Authorization: Bearer OTHER_TOKEN"
+      ],
+      "instructions": [
+        "Create a note on account A.",
+        "Follow read_note with account B's token and that note id.",
+        "The handler authenticates B, selects the row by id, and returns the body. may_read_account is not called."
+      ],
+      "observed_result": "Account B receives the body of account A's note. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Keep the caller and, after the note is loaded, reject the request unless may_read_account allows that caller for the note's account_id. links_grant still has to enforce a single active direction or this route will inherit those link defects.",
+      "code_changes": [
+        {
+          "file_name": "app/routes.py",
+          "fixed_code": "def read_note(note_id: int, request: Request):\n    account = current(request)\n    conn = request.app.state.conn\n    row = conn.execute(\n        \"SELECT * FROM notes WHERE id = ?\",\n        (note_id,),\n    ).fetchone()\n    if row is None:\n        fail(404, \"not found\")\n    if not access.may_read_account(conn, account[\"id\"], row[\"account_id\"]):\n        fail(403, \"forbidden\")\n    return note_json(row)\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Any valid session can request note ids, and SQLite assigns those ids sequentially. No link or ownership state is required."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The response contains another account's note body. The collection route's authorization check is bypassed by this direct read."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read read_note, note_json, and the router setup. No dependency or middleware adds an account check to this route."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "sessions.merged-source-acts-as-survivor",
+    "title": "Merged source session authenticates as the survivor account",
+    "description": "accept_merge marks the source account merged and sets merged_into_id to the survivor. It does not delete or disable rows in sessions. On the next request, account_for_token in app/access.py loads the source account for that token and returns the survivor row. current() then acts as the survivor for every route. The source token can read the survivor's recovery email and notes, including notes the survivor already had, and can pass owner and share checks as the survivor. The check that fails is account_for_token, which substitutes the survivor instead of rejecting the source token. create_session refuses a new login for a merged account, and that refusal does not apply to tokens already stored.",
+    "root_cause": "account_for_token returns the account named by merged_into_id. accept_merge leaves the source session token in sessions, so the old credential authenticates as the survivor.",
+    "intended_behavior": "After the merge, the source account is no longer a principal. Tokens issued to the source no longer authenticate, and they do not act as the survivor.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "app/routes.py",
+        "line": 247,
+        "scope": "list_notes",
+        "description": "After accept_merge commits, the source account's existing bearer token calls GET /accounts/{survivor_id}/notes."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/routes.py",
+        "line": 68,
+        "scope": "current",
+        "description": "current() resolves the bearer token through account_for_token and uses the returned row as the caller."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 23,
+        "scope": "account_for_token",
+        "description": "The source row's merged_into_id is set, and the function returns the survivor account instead of rejecting the token."
+      },
+      {
+        "kind": "propagation",
+        "file": "app/access.py",
+        "line": 40,
+        "scope": "may_read_account",
+        "description": "The caller id is now the survivor id, so the same-account branch allows the note list."
+      },
+      {
+        "kind": "sink",
+        "file": "app/routes.py",
+        "line": 261,
+        "scope": "list_notes",
+        "description": "The response contains the survivor's notes, including notes that were never moved from the source account."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "app/access.py",
+        "line": 17,
+        "description": "Any non-null merged_into_id triggers survivor substitution. The function does not test account status and does not stop at one merged principal when the survivor is itself merged."
+      },
+      {
+        "file": "app/access.py",
+        "line": 169,
+        "description": "accept_merge's last account write stores merged status and merged_into_id. The function never updates sessions."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 193,
+        "description": "create_session rejects an account whose status is not active, so a new password login as the source fails while the old token still resolves."
+      },
+      {
+        "file": "app/routes.py",
+        "line": 208,
+        "description": "GET /me with the same substituted row returns the survivor profile, including recovery_email."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The caller presents a bearer token that was issued to the source account before the merge. The accept request itself uses such a token."
+      },
+      {
+        "kind": "data_state",
+        "description": "accept_merge has committed status merged and merged_into_id for the source, and the sessions row for that token is still present."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Whoever holds the source account's pre-merge token, including the session used to accept the merge, continues after the merge as the survivor.",
+      "payloads": [
+        "POST /merge-requests/REQUEST_ID/accept Authorization: Bearer SOURCE_TOKEN",
+        "GET /accounts/SURVIVOR/notes Authorization: Bearer SOURCE_TOKEN",
+        "GET /me Authorization: Bearer SOURCE_TOKEN"
+      ],
+      "instructions": [
+        "Open a merge as the survivor and accept it with the source token. accept_merge sets merged_into_id and does not delete sessions.",
+        "Send the same source token to list_notes for the survivor id. account_for_token returns the survivor, may_read_account sees equal ids, and the handler returns the survivor's notes.",
+        "Send that token to GET /me. account_json includes the survivor's recovery_email.",
+        "Owner and share checks on later routes see the survivor id as well, because current() returns that same row."
+      ],
+      "observed_result": "The source token reads the survivor's notes, including notes the survivor already had, and GET /me returns the survivor's recovery_email. Derived from the source trace."
+    },
+    "remediation": {
+      "strategy": "Reject a token whose account is merged. In account_for_token, return no account when status is not active or merged_into_id is set. In accept_merge, delete sessions for the source account before commit. Do not return the survivor row.",
+      "code_changes": [
+        {
+          "file_name": "app/access.py",
+          "fixed_code": "def account_for_token(conn, token):\n    row = conn.execute(\n        \"SELECT account_id FROM sessions WHERE token = ?\",\n        (token,),\n    ).fetchone()\n    if row is None:\n        return None\n    account = conn.execute(\n        \"SELECT * FROM accounts WHERE id = ?\",\n        (row[\"account_id\"],),\n    ).fetchone()\n    if account is None:\n        return None\n    if account[\"status\"] != \"active\" or account[\"merged_into_id\"] is not None:\n        return None\n    return account\n"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "high",
+        "reason": "Accepting a merge requires a live source token, and that token remains in sessions after the commit. The following request takes the substitution branch."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The source credential becomes the survivor principal. It can read the survivor's pre-existing notes and recovery email and can perform survivor owner actions."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A same-agent second pass re-read account_for_token, current, accept_merge, list_notes, and create_session. The survivor return is unconditional once the merged row and the session both exist."
+    }
+  }
+]

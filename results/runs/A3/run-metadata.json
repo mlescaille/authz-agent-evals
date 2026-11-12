@@ -1,0 +1,29 @@
+{
+  "run_id": "A3",
+  "repo": "A3",
+  "target": "/tmp/authz-runs/A3/target",
+  "source_ref": "unversioned application snapshot under target/app; no git revision was read",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "execution_note": "No OS sandbox was available and the service was not started. Confirmed results are source-trace conclusions, not runtime observations.",
+  "selected_companion_files": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md"
+  ],
+  "prior_run_paths": [],
+  "shared_file_owners": {
+    "findings.json": "parent",
+    "REPORT.md": "parent",
+    "run-metadata.json": "parent"
+  },
+  "run_status": "complete",
+  "agents": {
+    "hunter": "same-agent",
+    "verifier": "same-agent second pass"
+  }
+}

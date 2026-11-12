@@ -1,0 +1,263 @@
+# Normative matching rules for this suite. Frozen before audit runs.
+# A confirmed finding matches a bug only when every concept group hits
+# and at least one location term hits. Comparison is case-insensitive substring.
+# See eval/MATCHING.md.
+
+bugs:
+  - id: R1
+    class: relationship
+    title: Previous device owner keeps access after transfer
+    location:
+      file: app/access.py
+      symbol: may_view_device
+      routes:
+        - POST /devices/{device_id}/transfer
+        - GET /devices/{device_id}/readings
+    description: >
+      Transfer changes the current owner and inserts a binding, but older
+      bindings still authorize. The previous owner can read readings written
+      after the transfer.
+    match:
+      locations_any:
+        - app/access.py
+        - may_view_device
+        - transfer_device
+        - device_bindings
+        - /devices/{device_id}/transfer
+      concepts_all:
+        - [transfer, transferred, previous owner, former owner, old owner, prior owner]
+        - [binding, bindings, device_bindings, released_at]
+        - [reading, readings, read access, still read, can read, remains able]
+
+  - id: R2
+    class: relationship
+    title: Revoked account link still grants note access
+    location:
+      file: app/access.py
+      symbol: links_grant
+      routes:
+        - DELETE /links/{link_id}
+        - GET /accounts/{account_id}/notes
+    description: >
+      Revocation stores revoked_at, but the link check does not require the
+      link to be unrevoked. The former grantee can still read the grantor's notes.
+    match:
+      locations_any:
+        - app/access.py
+        - links_grant
+        - account_links
+        - revoked_at
+        - /links/{link_id}
+      concepts_all:
+        - [revok, unlink, link removal, removed the link]
+        - [link, links, grantee, account_links]
+        - [still, remain, remains, ignored, ignores, not filtered, does not filter, keeps granting, continues to]
+
+  - id: R3
+    class: relationship
+    title: Device share reveals another account's device notes
+    location:
+      file: app/access.py
+      symbol: device_notes_for
+      routes:
+        - GET /devices/{device_id}/notes
+    description: >
+      A share should expose device readings only. Listing device notes returns
+      every note on the device to any account that can view the device, so a
+      sharer can read the owner's private device notes.
+    match:
+      locations_any:
+        - app/access.py
+        - device_notes_for
+        - device_notes
+        - /devices/{device_id}/notes
+      concepts_all:
+        - [device note, device notes, device_notes]
+        - [share, shares, shared, sharer]
+        - [private, other account, another account, all notes, every note, not the author, across accounts, each other, other author, another author, written by other]
+
+  - id: R4
+    class: relationship
+    title: Source session acts as the survivor after merge
+    location:
+      file: app/access.py
+      symbol: account_for_token
+      routes:
+        - POST /merge-requests/{request_id}/accept
+        - GET /accounts/{account_id}/notes
+    description: >
+      Merge marks the source account as merged into the survivor but leaves the
+      source session in place. Resolving that token follows merged_into_id, so
+      the source token reads the survivor's notes.
+    match:
+      locations_any:
+        - app/access.py
+        - account_for_token
+        - merged_into_id
+        - sessions
+      concepts_all:
+        - [merge, merged]
+        - [session, token, bearer]
+        - [merged_into, survivor, acts as, alias, impersonat, still valid, still authenticates]
+
+  - id: R5
+    class: relationship
+    title: Account link authorizes both directions
+    location:
+      file: app/access.py
+      symbol: links_grant
+      routes:
+        - POST /links
+        - GET /accounts/{account_id}/notes
+    description: >
+      A link is supposed to let only the grantee read the grantor. The check
+      treats either direction as sufficient, so the grantor can read the grantee's notes.
+    match:
+      locations_any:
+        - app/access.py
+        - links_grant
+        - account_links
+        - /links
+      concepts_all:
+        - [direction, one-way, one way, either direction, both directions, inverse, wrong way, grantor can read, lets the grantor, let the grantor, grantor read, reversed]
+        - [link, links, grantee, grantor, account_links]
+        - [read, notes, access]
+
+  - id: R6
+    class: relationship
+    title: Merge lets the survivor inherit access granted to the source
+    location:
+      file: app/access.py
+      symbol: accept_merge
+      routes:
+        - POST /merge-requests/{request_id}/accept
+    description: >
+      Links in which the source was the grantee are rewritten so the survivor
+      becomes the grantee. The survivor can read notes of accounts that had
+      granted access only to the source.
+    match:
+      locations_any:
+        - app/access.py
+        - accept_merge
+        - account_links
+        - /merge-requests/
+      concepts_all:
+        - [merge, merged]
+        - [grantee_account_id, becomes the grantee, is the grantee, granted to the source, granted only to the source]
+        - [rewrite, rewrites, rewritten, replaced, inherit, inherited]
+
+  - id: R7
+    class: relationship
+    title: Device shares survive transfer
+    location:
+      file: app/access.py
+      symbol: transfer_device
+      routes:
+        - POST /devices/{device_id}/transfer
+        - GET /devices/{device_id}/readings
+    description: >
+      Transfer does not remove device shares. An account that was shared on the
+      device can still read readings written by the new owner.
+    match:
+      locations_any:
+        - app/access.py
+        - transfer_device
+        - device_shares
+        - may_view_device
+        - /devices/{device_id}/transfer
+      concepts_all:
+        - [share, shares, device_shares, sharer]
+        - [transfer, transferred, new owner]
+        - [remain, remains, still, not removed, not deleted, not cleared, left in place, survive, survives, kept]
+
+  - id: R8
+    class: relationship
+    title: Merge gives the source's grantee the survivor's existing notes
+    location:
+      file: app/access.py
+      symbol: accept_merge
+      routes:
+        - POST /merge-requests/{request_id}/accept
+        - GET /accounts/{account_id}/notes
+    description: >
+      Links the source granted are rewritten so the survivor is the grantor.
+      The source's grantee can then read the survivor's notes, including notes
+      that existed before the merge.
+    match:
+      locations_any:
+        - app/access.py
+        - accept_merge
+        - account_links
+        - /merge-requests/
+      concepts_all:
+        - [merge, merged]
+        - [grantor_account_id, becomes the grantor, is the grantor, grantee of the source, source had granted]
+        - [rewrite, rewrites, rewritten, replaced, inherit, inherited, pre-existing, preexisting]
+
+  - id: C1
+    class: control
+    title: Any session can read a note by id
+    location:
+      file: app/routes.py
+      symbol: read_note
+      routes:
+        - GET /notes/{note_id}
+    description: >
+      The note-by-id route requires a session and then returns the note without
+      checking that the caller may read that account.
+    match:
+      locations_any:
+        - app/routes.py
+        - read_note
+        - /notes/{note_id}
+        - note_id
+      concepts_all:
+        - [read_note, "/notes/", note_id, note by id, notes by id]
+        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize, does not call, no comparison, never compares, does not compare, no owner]
+        - [other account, another account, any note, cross-account, not the owner]
+
+  - id: C2
+    class: control
+    title: Any session can relabel any device
+    location:
+      file: app/routes.py
+      symbol: update_device
+      routes:
+        - PATCH /devices/{device_id}
+    description: >
+      The device update route requires a session and then changes the label
+      without checking current ownership.
+    match:
+      locations_any:
+        - app/routes.py
+        - update_device
+        - "patch /devices"
+        - /devices/{device_id}
+      concepts_all:
+        - [update_device, patch, relabel]
+        - [label]
+        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize, does not call, no comparison, never compares, does not compare, no owner]
+        - [other account, another account, any device, not the owner, cross-account]
+
+  - id: C3
+    class: control
+    title: Any session can read another account's recovery email
+    location:
+      file: app/routes.py
+      symbol: read_account
+      routes:
+        - GET /accounts/{account_id}
+    description: >
+      The account route requires a session and returns recovery_email for the
+      requested id without checking that the caller is that account.
+    match:
+      locations_any:
+        - app/routes.py
+        - read_account
+        - recovery_email
+        - /accounts/{account_id}
+      concepts_all:
+        - [read_account, recovery_email, recovery email, /accounts/]
+        - [recovery_email, recovery email]
+        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize, does not call, no comparison, never compares, does not compare, no owner]
+        - [other account, another account, any account, not the owner, cross-account]
