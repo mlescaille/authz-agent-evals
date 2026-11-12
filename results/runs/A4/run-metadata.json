@@ -1,0 +1,15 @@
+{
+  "run_id": "A4",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "repo": "authz-A4",
+  "target": "/tmp/authz-runs/A4/target",
+  "source_ref": "application source under app/; commit metadata was not read",
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "source-only; service not started; no network requests",
+  "prior_runs": [],
+  "run_status": "complete",
+  "confirmation_bar": "An authorization issue whose entire control flow is in the supplied source was eligible to be confirmed. observed_result states the cross-account read or write derived from the source trace.",
+  "hunter_verifier": "same agent; verification was a same-agent second pass that re-read every cited line and attempted to disprove each candidate"
+}

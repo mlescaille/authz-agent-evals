@@ -1,0 +1,29 @@
+{
+  "run_id": "A2",
+  "repo": "A2",
+  "target": "/tmp/authz-runs/A2/target",
+  "source_ref": "supplied target tree; no git revision read",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "execution_note": "No OS sandbox was available. The service was not started and no network requests were sent. Confirmed authorization results are the cross-account reads and writes implied by the source trace.",
+  "selected_companion_files": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md",
+    "HUNTING.md"
+  ],
+  "prior_run_paths": [],
+  "shared_file_owners": {
+    "findings.json": "parent",
+    "REPORT.md": "parent",
+    "run-metadata.json": "parent"
+  },
+  "coverage_claim": "partial",
+  "run_status": "complete",
+  "incomplete_reason": null,
+  "verification_detail": "Single agent mapped every route and authorization helper, then re-read each cited line and attempted to disprove the candidate before keeping it. Recorded as a same-agent second pass because the task forbade subagents."
+}

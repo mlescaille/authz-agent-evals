@@ -1,0 +1,24 @@
+{
+  "run_id": "A5",
+  "repo": "A5",
+  "target": "/tmp/authz-runs/A5/target",
+  "source_ref": "supplied application tree under /tmp/authz-runs/A5/target; commit not consulted",
+  "profile": "quick",
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "verification": "same-agent second pass",
+  "run_status": "complete",
+  "companions": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md"
+  ],
+  "prior_runs": [],
+  "shared_file_owners": {
+    "findings.json": "same-agent",
+    "REPORT.md": "same-agent",
+    "run-metadata.json": "same-agent"
+  },
+  "notes": "Single-agent quick profile. No prior coverage ledger. Routes and authorization decisions were mapped from the supplied source, candidates were re-read at the cited lines, and retained records are those the second pass could not disprove. The service was not started and no network request was sent. Confirmed results are source-trace conclusions."
+}

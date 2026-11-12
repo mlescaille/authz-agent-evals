@@ -74,7 +74,7 @@ bugs:
       concepts_all:
         - [device note, device notes, device_notes]
         - [share, shares, shared, sharer]
-        - [private, other account, another account, all notes, every note, not the author, across accounts]
+        - [private, other account, another account, all notes, every note, not the author, across accounts, each other, other author, another author, written by other]
 
   - id: R4
     class: relationship
@@ -119,7 +119,7 @@ bugs:
         - account_links
         - /links
       concepts_all:
-        - [direction, one-way, one way, either direction, both directions, inverse, wrong way]
+        - [direction, one-way, one way, either direction, both directions, inverse, wrong way, grantor can read, lets the grantor, let the grantor, grantor read, reversed]
         - [link, links, grantee, grantor, account_links]
         - [read, notes, access]
 
@@ -213,7 +213,7 @@ bugs:
         - note_id
       concepts_all:
         - [read_note, "/notes/", note_id, note by id, notes by id]
-        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize]
+        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize, does not call, no comparison, never compares, does not compare, no owner]
         - [other account, another account, any note, cross-account, not the owner]
 
   - id: C2
@@ -236,7 +236,7 @@ bugs:
       concepts_all:
         - [update_device, patch, relabel]
         - [label]
-        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize]
+        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize, does not call, no comparison, never compares, does not compare, no owner]
         - [other account, another account, any device, not the owner, cross-account]
 
   - id: C3
@@ -259,5 +259,5 @@ bugs:
       concepts_all:
         - [read_account, recovery_email, recovery email, /accounts/]
         - [recovery_email, recovery email]
-        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize]
+        - [missing, no authorization, no ownership, does not check, not checked, any authenticated, arbitrary, no check, without a check, fails to check, fails to authorize, does not call, no comparison, never compares, does not compare, no owner]
         - [other account, another account, any account, not the owner, cross-account]

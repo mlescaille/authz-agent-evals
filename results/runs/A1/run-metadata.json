@@ -1,0 +1,28 @@
+{
+  "run_id": "A1",
+  "repo": "A1-target",
+  "target": "/tmp/authz-runs/A1/target",
+  "source_ref": "target tree has no git metadata; reviewed the application source present under app/",
+  "profile": "quick",
+  "scope_paths": ["app"],
+  "budget": null,
+  "execution_policy": "source-trace-only; service not started; no OS sandbox",
+  "verification": "same-agent second pass",
+  "run_status": "complete",
+  "prior_runs": [],
+  "companions": [
+    "ATTACK-CLASSES.md#Access control",
+    "ATTACK-CLASSES.md#Business logic",
+    "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+    "WEB-PROTOCOL-AND-AUTH.md#Account linking and identity collision",
+    "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation"
+  ],
+  "shared_file_owners": {
+    "findings.json": "parent",
+    "REPORT.md": "parent",
+    "run-metadata.json": "parent"
+  },
+  "hunter_verifier": "same-agent",
+  "notes": "Single-agent quick profile. The hunt mapped every route and authorization helper, then a same-agent second pass re-read each cited line and tried to disprove the candidate. Authorization issues whose control flow is entirely in the target source are confirmed. observed_result values are source-trace results. The service was not started and no network request was sent."
+}

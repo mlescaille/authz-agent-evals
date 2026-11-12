@@ -1,0 +1,28 @@
+{
+  "run_id": "C2",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "scoped_loopback_token_available": true,
+  "repo": "C2",
+  "target": "/tmp/authz-runs/C2/target",
+  "source_ref": "no git metadata in the target tree",
+  "scope_paths": [
+    "app/__init__.py",
+    "app/access.py",
+    "app/db.py",
+    "app/main.py",
+    "app/passwords.py",
+    "app/routes.py"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "prior_runs": [],
+  "run_status": "complete",
+  "coverage": "partial quick profile of the application tree; one hunter pass and a same-agent second pass; no second hunter wave",
+  "loopback": {
+    "base_url": "http://127.0.0.1:43073",
+    "token_available": true,
+    "token_scope": "read",
+    "writes_attempted": false
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "run_id": "C1",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "scoped_loopback_token_available": true,
+  "repo": "C1",
+  "target": "/tmp/authz-runs/C1/target",
+  "source_ref": "target/app source as supplied; git metadata was not read",
+  "scope_paths": [
+    "app/main.py",
+    "app/routes.py",
+    "app/access.py",
+    "app/db.py",
+    "app/passwords.py",
+    "app/__init__.py"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "prior_runs": [],
+  "prior_run_note": "No prior ledger was supplied. Other audit runs were not searched.",
+  "run_status": "complete",
+  "coverage": {
+    "profile_limit": "quick single-agent pass over the FastAPI account, session, device, share, link, and merge routes",
+    "partial": true,
+    "hunter": "same agent",
+    "verification": "same-agent second pass re-read every cited line and attempted to disprove each candidate"
+  },
+  "loopback": {
+    "base_url": "http://127.0.0.1:41457",
+    "token_available": true,
+    "token_constraint": "Read-only bearer restricted to GET /health, GET /me, GET /devices, GET /devices/1, GET /devices/1/readings, GET /devices/1/notes, GET /accounts/1, GET /accounts/1/notes, GET /notes/1, and GET /links for account 1, device id 1, and note id 1.",
+    "cross_account_requests_sent": false,
+    "use": "Same-account response shapes were observed. Cross-account conclusions in findings.json were derived from the source trace."
+  }
+}

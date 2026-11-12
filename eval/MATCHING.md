@@ -4,12 +4,14 @@
 
 A finding is considered only when its verdict is `confirmed`. `needs_validation` and `rejected` records do not detect a bug and are not false positives.
 
-The finding text is the concatenation of every string in the JSON object, compared as a case-insensitive substring.
+Comparison is a case-insensitive substring.
 
 The finding matches a bug when both of these hold:
 
-1. Every concept group under `match.concepts_all` contributes at least one term.
-2. At least one term under `match.locations_any` appears.
+1. Every concept group under `match.concepts_all` contributes at least one term inside `title`, `description`, or `root_cause` (the claim).
+2. At least one term under `match.locations_any` appears anywhere in the record, including the trace.
+
+The first automatic pass searched the whole record, including remediation. Fix paragraphs often name a neighboring check, and that credited extra bugs. The published rule keeps location terms on the whole record and restricts concept terms to the claim. After reading the claims, the concept lists also gained paraphrases of a missing check (`does not call`, `no comparison`, `never compares`, `does not compare`, `no owner`), of a reversed link (`grantor can read`, `lets the grantor`, `reversed`), and of a shared-device note leak (`each other`, `another author`, `written by other`). `metrics.json` keeps the original whole-record rates under `full_record_substring`.
 
 One finding may match more than one bug. The bug is then detected once for that run. The finding counts once as a true positive.
 

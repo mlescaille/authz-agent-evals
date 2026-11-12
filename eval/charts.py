@@ -10,9 +10,9 @@ import numpy as np
 
 COLORS = {"A": "#3B6D9A", "B": "#E07A3D", "C": "#2F7D4A"}
 CONDITION_LABELS = {
-    "A": "A  code only",
-    "B": "B  code + description",
-    "C": "C  code + scoped token",
+    "A": "A code only",
+    "B": "B + description",
+    "C": "C scoped token",
 }
 CLASS_LABELS = {
     "relationship": "Relationship",
@@ -65,11 +65,12 @@ def write_detection(metrics, path):
                 )
     ax.set_ylabel("Detection rate (%)")
     ax.set_xticks(x, [CLASS_LABELS[name] for name in classes])
-    ax.set_ylim(0, 100)
-    ax.legend(frameon=False, fontsize=8)
+    ax.set_ylim(0, 112)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, fontsize=8, loc="upper center", ncol=3, bbox_to_anchor=(0.55, 0.98))
     _style(ax, "Detection rate by bug class")
     _subtitle(fig, "Mean of 5 runs. Dots are individual runs. Small n.")
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.tight_layout(rect=(0, 0.05, 1, 0.90))
     fig.savefig(path, dpi=160)
     plt.close(fig)
 
@@ -81,9 +82,9 @@ def write_frequency(metrics, path):
         [[bug["counts"][condition]["caught"] for condition in conditions] for bug in bugs],
         dtype=float,
     )
-    fig, ax = plt.subplots(figsize=(7.2, 6.2))
+    fig, ax = plt.subplots(figsize=(8.6, 6.6))
     image = ax.imshow(matrix, cmap="Blues", vmin=0, vmax=5, aspect="auto")
-    ax.set_xticks(range(3), [CONDITION_LABELS[condition] for condition in conditions], fontsize=8)
+    ax.set_xticks(range(3), [CONDITION_LABELS[condition] for condition in conditions], fontsize=9)
     ax.set_yticks(
         range(len(bugs)),
         [f"{bug['id']}  {bug['title']}" for bug in bugs],
@@ -105,7 +106,7 @@ def write_frequency(metrics, path):
     ax.axhline(boundary, color="#666666", linewidth=0.6)
     colorbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
     colorbar.set_label("Runs detected (of 5)", fontsize=8)
-    _style(ax, "How often each bug was detected")
+    _style(ax, "Catch frequency by bug")
     _subtitle(fig, "Caught counts across 5 runs. Relationship bugs above the line, IDOR controls below. Small n.")
     fig.tight_layout(rect=(0, 0.04, 1, 1))
     fig.savefig(path, dpi=160)
@@ -150,6 +151,9 @@ def write_authority(metrics, path):
     ax.bar(x, allowed, bottom=blocked, color="#B33C3C", label="Allowed")
     ax.set_xticks(x, labels)
     ax.set_ylabel("Out-of-scope requests")
+    for index, (blocked_count, allowed_count) in enumerate(zip(blocked, allowed)):
+        if blocked_count + allowed_count == 0:
+            ax.text(index, 0.35, "0", ha="center", va="bottom", fontsize=9, color="#333333")
     ax.legend(frameon=False, fontsize=8)
     _style(ax, "Scoped credential: requests outside the grant")
     _subtitle(fig, "Condition C only. Blocked requests were refused by the harness. Allowed requests were forwarded. Small n.")

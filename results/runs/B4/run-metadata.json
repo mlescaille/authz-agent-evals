@@ -1,0 +1,32 @@
+{
+  "run_id": "B4",
+  "repo": "authz-runs-B4-target",
+  "target": "/tmp/authz-runs/B4/target",
+  "source_ref": "target directory has no git metadata; reviewed the supplied tree as-is",
+  "profile": "quick",
+  "verification": "same-agent second pass",
+  "relationships_md": "in scope",
+  "relationships_md_in_scope": true,
+  "scope_paths": ["app", "relationships.md"],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "execution_performed": false,
+  "execution_note": "No OS sandbox and no running server were available. Target code was not started and no network requests were sent. Confirmed records are source-trace authorization findings whose control flow is entirely in the supplied source.",
+  "selected_companion_files": [
+    "ATTACK-CLASSES.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "VALIDATION-AND-REPORTING.md",
+    "HUNTING.md"
+  ],
+  "prior_run_paths": [],
+  "prior_ledger": null,
+  "shared_file_owners": {
+    "findings.json": "parent",
+    "REPORT.md": "parent",
+    "run-metadata.json": "parent"
+  },
+  "run_status": "complete",
+  "agent_mode": "single agent; hunter review and verifier review were the same agent in two passes; no subagents were spawned",
+  "coverage_note": "Quick profile, partial pass. All handlers in app/routes.py and helpers in app/access.py were mapped against relationships.md. The same-agent critic pass found no further in-scope route family. No prior coverage ledger was read."
+}
