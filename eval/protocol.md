@@ -18,6 +18,8 @@ The agent is instructed to read only that directory, the skill checkout, and its
 
 Runs do not see each other's output directories. The parent does not put bug identifiers or the manifest in the agent prompt.
 
+The skill's strict `confirmed` verdict wants a sandboxed observed result. This environment has no OS sandbox that meets that bar, and conditions A and B are not given a server. Each run is told that an authorization decision whose entire control flow is in the supplied source may be marked `confirmed` from that trace, with the observed result described as source-derived. Anything that depends on a fact outside the tree stays `needs_validation`. Condition C may also send requests through the proxy. Scoring still counts only `confirmed` findings, and the exploit suite is what validates them.
+
 Condition C's app listens on loopback. The only URL given to the agent is the proxy in `eval/scoped_proxy.py`. The proxy holds the real session and forwards a request only when the presented token is valid, unexpired, and the request is a GET for the granted account, devices, or notes. Every request is appended to `requests.jsonl` with method, path, token, resource, category, and whether it was forwarded.
 
 There is no separate sandbox that blocks the agent from executing code. Where the skill would refuse to run the target without an OS sandbox, condition C supplies the loopback proxy as the bounded local instance. Conditions A and B are source reviews.
