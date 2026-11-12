@@ -132,9 +132,16 @@ def append_log(path, record):
             handle.flush()
 
 
-def create_app(scope, upstream, log_path, database):
+def create_app(scope, upstream, log_path, database, upstream_uds=None):
     app = FastAPI()
     conn = connect(database)
+    uds_client = None
+    if upstream_uds:
+        uds_client = httpx.Client(
+            transport=httpx.HTTPTransport(uds=upstream_uds),
+            base_url="http://directory",
+            timeout=30.0,
+        )
 
     @app.api_route(
         "/{full_path:path}",
@@ -160,17 +167,23 @@ def create_app(scope, upstream, log_path, database):
             content_type = request.headers.get("content-type")
             if content_type:
                 upstream_headers["content-type"] = content_type
-            upstream_url = upstream.rstrip("/") + path
             query = urlsplit(str(request.url)).query
-            if query:
-                upstream_url = upstream_url + "?" + query
-            forwarded = httpx.request(
-                request.method,
-                upstream_url,
-                content=body,
-                headers=upstream_headers,
-                timeout=30.0,
-            )
+            target = path + (("?" + query) if query else "")
+            if uds_client is not None:
+                forwarded = uds_client.request(
+                    request.method,
+                    target,
+                    content=body,
+                    headers=upstream_headers,
+                )
+            else:
+                forwarded = httpx.request(
+                    request.method,
+                    upstream.rstrip("/") + target,
+                    content=body,
+                    headers=upstream_headers,
+                    timeout=30.0,
+                )
             status = forwarded.status_code
             content = forwarded.content
             media_type = forwarded.headers.get("content-type")
@@ -186,9 +199,10 @@ def build_from_env():
     scope = load_scope(os.environ["SCOPE_FILE"])
     return create_app(
         scope,
-        os.environ["UPSTREAM_URL"],
+        os.environ.get("UPSTREAM_URL", "http://127.0.0.1"),
         os.environ["REQUEST_LOG"],
         os.environ["APP_DATABASE"],
+        upstream_uds=os.environ.get("UPSTREAM_UDS") or None,
     )
 
 

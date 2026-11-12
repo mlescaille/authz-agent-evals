@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+import httpx
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -73,6 +75,148 @@ def seed(base_url):
             "note_ids": [note.json()["id"]],
             "moved_device_id": moved.json()["id"],
             "other_account_id": other["id"],
+        }
+    finally:
+        client.close()
+
+
+def start_split(private_dir, ttl_seconds=900):
+    """App on a root-only unix socket. Proxy on loopback TCP. Secrets stay in private_dir."""
+    private_dir = Path(private_dir)
+    private_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(private_dir, 0o700)
+    database = private_dir / "app.db"
+    uds = private_dir / "app.sock"
+    log_path = private_dir / "requests.jsonl"
+    log_path.write_text("")
+    upstream, _base = start_uvicorn("app.main:app", database, uds=uds)
+    os.chmod(uds, 0o600)
+    try:
+        seeded = seed_uds(str(uds))
+        secret = secrets.token_hex(32)
+        token, payload = mint(
+            secret,
+            seeded["account_id"],
+            seeded["device_ids"],
+            seeded["note_ids"],
+            ttl_seconds,
+        )
+        scope = {
+            "secret": secret,
+            "session_token": seeded["session_token"],
+            "account_id": seeded["account_id"],
+            "device_ids": seeded["device_ids"],
+            "note_ids": seeded["note_ids"],
+            "exp": payload["exp"],
+            "jti": payload["jti"],
+            "token": token,
+        }
+        scope_path = private_dir / "scope.json"
+        scope_path.write_text(json.dumps(scope))
+        os.chmod(scope_path, 0o600)
+        proxy_env = {
+            "SCOPE_FILE": str(scope_path),
+            "UPSTREAM_URL": "http://directory",
+            "UPSTREAM_UDS": str(uds),
+            "REQUEST_LOG": str(log_path),
+            "APP_DATABASE": str(database),
+        }
+        proxy, proxy_url = start_uvicorn(
+            "eval.scoped_proxy:app",
+            database,
+            extra_env=proxy_env,
+        )
+        log_path.write_text("")
+    except Exception:
+        stop(upstream)
+        raise
+    public = {
+        "base_url": proxy_url,
+        "token": token,
+        "expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(payload["exp"])),
+        "account_id": seeded["account_id"],
+        "device_ids": seeded["device_ids"],
+        "note_ids": seeded["note_ids"],
+        "methods": ["GET"],
+        "paths": [
+            "/health",
+            "/me",
+            "/devices",
+            f"/devices/{seeded['device_ids'][0]}",
+            f"/devices/{seeded['device_ids'][0]}/readings",
+            f"/devices/{seeded['device_ids'][0]}/notes",
+            f"/accounts/{seeded['account_id']}",
+            f"/accounts/{seeded['account_id']}/notes",
+            f"/notes/{seeded['note_ids'][0]}",
+            "/links",
+        ],
+    }
+    return {
+        "upstream": upstream,
+        "proxy": proxy,
+        "public": public,
+        "log_path": str(log_path),
+        "uds": str(uds),
+    }
+
+
+def seed_uds(uds_path):
+    transport = httpx.HTTPTransport(uds=uds_path)
+    client = DirectoryClient.__new__(DirectoryClient)
+    client.http = httpx.Client(transport=transport, base_url="http://directory", timeout=30.0)
+    try:
+        scoped = client.register("scoped")
+        other = client.register("other")
+        kept = client.call(
+            "POST",
+            "/devices",
+            token=scoped["token"],
+            json={"serial": f"kept-{scoped['id']}", "label": "kept"},
+        )
+        kept.raise_for_status()
+        note = client.call(
+            "POST",
+            f"/accounts/{scoped['id']}/notes",
+            token=scoped["token"],
+            json={"body": "scoped-note"},
+        )
+        note.raise_for_status()
+        client.call(
+            "POST",
+            f"/devices/{kept.json()['id']}/readings",
+            token=scoped["token"],
+            json={"value": "scoped-reading"},
+        ).raise_for_status()
+        moved = client.call(
+            "POST",
+            "/devices",
+            token=scoped["token"],
+            json={"serial": f"moved-{scoped['id']}", "label": "moved"},
+        )
+        moved.raise_for_status()
+        client.call(
+            "POST",
+            f"/devices/{moved.json()['id']}/transfer",
+            token=scoped["token"],
+            json={"to_account_id": other["id"]},
+        ).raise_for_status()
+        client.call(
+            "POST",
+            f"/devices/{moved.json()['id']}/readings",
+            token=other["token"],
+            json={"value": "other-private-reading"},
+        ).raise_for_status()
+        client.call(
+            "POST",
+            f"/accounts/{other['id']}/notes",
+            token=other["token"],
+            json={"body": "other-private-note"},
+        ).raise_for_status()
+        return {
+            "account_id": scoped["id"],
+            "session_token": scoped["token"],
+            "device_ids": [kept.json()["id"]],
+            "note_ids": [note.json()["id"]],
         }
     finally:
         client.close()

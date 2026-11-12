@@ -12,9 +12,11 @@ The relationship note states invariants. It is not a defect list. Condition C do
 
 ## Isolation
 
-`eval/prepare_run.py` copies `app/` into a fresh directory. Condition B also copies `eval/relationships.md`. The copy does not include `eval/ground_truth.yaml`, exploit tests, other runs, or this repository's README.
+The first batch copied `app/` aside and instructed each session not to open the repository. That is not an operating-system boundary. The rerun removes the answer key from the machine instead, because the audit sessions are Cursor subagents and cannot be placed inside a container: the `agent` CLI is installed but not logged in, and there is no API key.
 
-The agent is instructed to read only that directory, the skill checkout, and its own output directory. This is not an operating-system deny rule. A determined agent on the same machine could open the repository. The write-up states that limit.
+Before those runs, `eval/`, `results/`, and `.git` are deleted from the VM. GitHub still has the branch. Each session's directory contains only that run's `app/`, a copy of the security-audit skill, and `output/`. Condition B also has `relationships.md`. Completed outputs are moved to a root-owned directory before the next run. `eval/isolation_check.py` records a bubblewrap probe: a process with only the run directory mounted cannot read `eval/ground_truth.yaml`. `find / -name ground_truth.yaml` must be empty during the runs. The result is stored in each run's `run-metadata.json`.
+
+Condition C's app listens on a root-only unix socket. The session receives only the loopback proxy URL and the scoped token.
 
 Runs do not see each other's output directories. The parent does not put bug identifiers or the manifest in the agent prompt.
 
